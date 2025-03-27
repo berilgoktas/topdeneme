@@ -1,0 +1,194 @@
+<app-login *ngIf="!isLoggedIn"></app-login>
+
+<div class="meeting-tracker" *ngIf="isLoggedIn">
+  <div class="header">
+    <h1>Toplantı Takip Sistemi</h1>
+    <button class="btn btn-danger logout-btn" (click)="logout()">Çıkış Yap</button>
+  </div>
+  
+  <!-- Meeting Controls -->
+  <div class="meeting-controls">
+    <h2>Toplantı Kontrolü</h2>
+    <div class="timer">Toplam Süre: {{ formatTime(totalMeetingTime) }}</div>
+    <div class="control-buttons">
+      <button class="btn btn-primary" (click)="toggleMeeting()">
+        {{ isMeetingRunning ? 'Durdur' : 'Başlat' }}
+      </button>
+      <button class="btn btn-warning" (click)="showResetMeetingModal()">
+        Sıfırla
+      </button>
+    </div>
+  </div>
+
+  <!-- Show/Hide History -->
+  <div class="history-toggle">
+    <button class="btn btn-secondary" (click)="toggleHistory()">
+      {{ showHistory ? 'Toplantıyı Göster' : 'Geçmiş Toplantıları Göster' }}
+    </button>
+  </div>
+
+  <!-- Current Meeting -->
+  <div *ngIf="!showHistory" class="meeting-section">
+    <h2>Katılımcılar</h2>
+    <div class="participants">
+      <div class="participant-card" *ngFor="let participant of participants">
+        <h3>{{ participant.name }}</h3>
+        <div class="status-checkboxes">
+          <label class="checkbox-label">
+            <input type="checkbox" [(ngModel)]="participant.isLate" (change)="updateParticipantStatus(participant, participant.isLate ? 'late' : null)">
+            Geç Geldi
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" [(ngModel)]="participant.shouldAttend" (change)="updateParticipantStatus(participant, participant.shouldAttend ? 'absent' : null)">
+            Katılmadı
+          </label>
+        </div>
+
+        <div class="timer-controls">
+          <div class="timer">Süre: {{ formatTime(participant.time) }}</div>
+          <div class="button-group">
+            <button class="btn btn-primary" (click)="toggleParticipant(participant)">
+              {{ participant.isRunning ? 'Durdur' : 'Başlat' }}
+            </button>
+            <button class="btn btn-warning" (click)="resetParticipantTime(participant)">
+              Sıfırla
+            </button>
+          </div>
+        </div>
+
+        <!-- Notes Section -->
+        <div class="note-section">
+          <input type="text" [(ngModel)]="participantNotes[participant.id]" 
+                 placeholder="Yeni not ekle"
+                 (keyup.enter)="addNote(participant)"
+                 class="note-input">
+          <button class="btn btn-success" (click)="addNote(participant)">Not Ekle</button>
+          
+          <div *ngFor="let note of participant.notes; let i = index" class="note-item">
+            <input type="text" [(ngModel)]="participant.notes[i]" class="note-input">
+            <button class="btn btn-danger" (click)="deleteNote(participant, i)">Sil</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- End Meeting Button -->
+    <div class="end-meeting-section">
+      <button class="btn btn-danger btn-large" (click)="showEndMeetingModal()" [disabled]="totalMeetingTime === 0">
+        Toplantıyı Bitir
+      </button>
+    </div>
+  </div>
+
+  <!-- Meeting History -->
+  <div *ngIf="showHistory" class="meeting-history">
+    <h2>Geçmiş Toplantılar</h2>
+    <div class="history-card" *ngFor="let meeting of meetingHistory">
+      <div class="history-header">
+        <div>
+          <h3>Toplantı Tarihi: {{ meeting.date }}</h3>
+          <h3>Toplantı Başlangıç: {{ meeting.startTime }}</h3>
+          <h3>Toplantı Bitiş: {{ meeting.endTime }}</h3>
+          <p>Toplam Süre: {{ formatTime(meeting.totalTime) }}</p>
+        </div>
+        <div class="history-actions">
+          <button class="btn btn-primary" (click)="toggleEditMeeting(meeting)">
+            {{ meeting.isEditing ? 'Kaydet' : 'Düzenle' }}
+          </button>
+          <button class="btn btn-danger" (click)="showDeleteMeetingModal(meeting)">Sil</button>
+        </div>
+      </div>
+      
+      <div class="history-participants">
+        <div *ngFor="let participant of meeting.participants" class="history-participant">
+          <h4>{{ participant.name }}</h4>
+          <div *ngIf="!meeting.isEditing">
+            <p>Süre: {{ formatTime(participant.time) }}</p>
+          </div>
+          <div *ngIf="meeting.isEditing" class="time-edit">
+            <div class="time-input-group">
+              <label>Süre (saniye):
+                <input type="number" 
+                       min="0" 
+                       max="59" 
+                       class="time-unit-input"
+                       [ngModel]="participant.time"
+                       (ngModelChange)="participant.tempTime = $event || 0"
+                       (input)="handleTimeInput($event, participant)">
+              </label>
+            </div>
+            <p>Mevcut Süre: {{ formatTime(participant.time) }}</p>
+          </div>
+          
+          <div class="status-radio" *ngIf="meeting.isEditing">
+            <label class="checkbox-label">
+              <input type="checkbox" 
+                     [checked]="participant.isLate"
+                     (change)="handleStatusChange($event, participant, 'late', meeting)">
+              Geç Geldi
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" 
+                     [checked]="participant.shouldAttend"
+                     (change)="handleStatusChange($event, participant, 'absent', meeting)">
+              Katılmadı
+            </label>
+          </div>
+
+          <div class="status-text" *ngIf="!meeting.isEditing">
+            <p *ngIf="participant.isLate">✓ Geç Geldi</p>
+            <p *ngIf="participant.shouldAttend">✓ Katılmadı</p>
+          </div>
+
+          <div *ngIf="participant.notes.length > 0">
+            <h5>Notlar:</h5>
+            <div *ngFor="let note of participant.notes; let i = index">
+              <div class="note-item" *ngIf="meeting.isEditing">
+                <input type="text" [(ngModel)]="participant.notes[i]" class="note-input">
+                <button class="btn btn-danger btn-sm" (click)="participant.notes.splice(i, 1)">Sil</button>
+              </div>
+              <p *ngIf="!meeting.isEditing">{{ note }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Modal -->
+  <div class="custom-modal" *ngIf="showModal">
+    <div class="modal-overlay" (click)="closeModal()"></div>
+    <div class="modal-content">
+      <h3>{{ modalTitle }}</h3>
+      <p>{{ modalMessage }}</p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" (click)="closeModal()">İptal</button>
+        <button [class]="'btn ' + modalConfirmButtonClass" (click)="confirmModal()">
+          {{ modalConfirmText }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  position: relative;
+}
+
+.header h1 {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+}
+
+.logout-btn {
+  padding: 0.5rem 1rem;
+  margin-left: auto;
+}
+</style> 
