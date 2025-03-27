@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';  // Angular component'i oluşturmak için gerekli import
+import { Component, OnInit, isDevMode } from '@angular/core';  // Angular component'i oluşturmak için gerekli import
 import { CommonModule } from '@angular/common';      // NgIf, NgFor gibi temel direktifler için gerekli import
 import { FormsModule } from '@angular/forms';         // Angular'ın formları için gerekli modül
 import { bootstrapApplication } from '@angular/platform-browser'; // Angular uygulamasını başlatmak için gerekli modül
@@ -6,6 +6,7 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, set, onValue, push, remove, update, get } from 'firebase/database';
 import { environment } from './environments/environment';
 import { LoginComponent } from './app/login.component';
+import { provideServiceWorker } from '@angular/service-worker';
 
 // Firebase başlatma
 const app = initializeApp(environment.firebase);
@@ -668,4 +669,9 @@ export class App implements OnInit {
   }
 }
 
-bootstrapApplication(App);
+bootstrapApplication(App, {
+    providers: [provideServiceWorker('ngsw-worker.js', {
+            enabled: !isDevMode(),
+            registrationStrategy: 'registerWhenStable:30000'
+        })]
+});
