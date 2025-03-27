@@ -96,6 +96,8 @@ export class App implements OnInit {
 
   isLoggedIn: boolean = false;
 
+  showLogoutConfirmModal = false;
+
   async ngOnInit() {
     // Login kontrolü
     this.isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
@@ -663,7 +665,15 @@ export class App implements OnInit {
     this.showModal = true;
   }
 
-  logout() {
+  showLogoutModal() {
+    this.showLogoutConfirmModal = true;
+  }
+
+  closeLogoutModal() {
+    this.showLogoutConfirmModal = false;
+  }
+
+  confirmLogout() {
     sessionStorage.removeItem('isLoggedIn');
     window.location.reload();
   }

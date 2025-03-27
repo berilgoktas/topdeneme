@@ -3,11 +3,14 @@
 <div class="meeting-tracker" *ngIf="isLoggedIn">
   <div class="header">
     <h1>Toplantı Takip Sistemi</h1>
-    <button class="btn btn-danger logout-btn" (click)="logout()">Çıkış Yap</button>
+    <button class="btn btn-danger logout-btn" (click)="showLogoutModal()">Çıkış Yap</button>
+
   </div>
   
   <!-- Meeting Controls -->
   <div class="meeting-controls">
+    <img src="assets/public/logo.png" alt="Logo">
+
     <h2>Toplantı Kontrolü</h2>
     <div class="timer">Toplam Süre: {{ formatTime(totalMeetingTime) }}</div>
     <div class="control-buttons">
@@ -166,6 +169,19 @@
         <button [class]="'btn ' + modalConfirmButtonClass" (click)="confirmModal()">
           {{ modalConfirmText }}
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Çıkış Onay Modalı -->
+  <div class="custom-modal" *ngIf="showLogoutConfirmModal">
+    <div class="modal-overlay" (click)="closeLogoutModal()"></div>
+    <div class="modal-content">
+      <h3>Çıkış Yap</h3>
+      <p>Çıkış yapmak istediğinizden emin misiniz?</p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" (click)="closeLogoutModal()">İptal</button>
+        <button class="btn btn-danger" (click)="confirmLogout()">Çıkış Yap</button>
       </div>
     </div>
   </div>
