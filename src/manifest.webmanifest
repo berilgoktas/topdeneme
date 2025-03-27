@@ -6,8 +6,16 @@
   "display": "standalone",
   "scope": "./",
   "start_url": "./",
-  "orientation": "any",
+  "orientation": "portrait-primary",
   "description": "Toplantı katılımcılarını ve sürelerini takip etmek için kullanılan uygulama",
+  "prefer_related_applications": false,
+  "categories": ["productivity", "business"],
+  "shortcuts": [
+    {
+      "name": "Yeni Toplantı",
+      "url": "/"
+    }
+  ],
   "icons": [
     {
       "src": "assets/icons/icon-72x72.png",
