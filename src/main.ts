@@ -7,6 +7,7 @@ import { getDatabase, ref, set, onValue, push, remove, update, get } from 'fireb
 import { environment } from './environments/environment';
 import { LoginComponent } from './app/login.component';
 import { provideServiceWorker } from '@angular/service-worker';
+import * as XLSX from 'xlsx';
 
 // Firebase başlatma
 const app = initializeApp(environment.firebase);
@@ -103,6 +104,10 @@ export class App implements OnInit {
   currentPage: number = 1;
   itemsPerPage: number = 5;
   totalPages: number = 1;
+
+  startDate: string = '';
+  endDate: string = '';
+  showExportModal: boolean = false;
 
   get paginatedMeetings(): MeetingHistory[] {
     const startIndex = (this.currentPage - 1) * this.itemsPerPage;
@@ -706,6 +711,128 @@ export class App implements OnInit {
   confirmLogout() {
     sessionStorage.removeItem('isLoggedIn');
     window.location.reload();
+  }
+
+  exportToExcel() {
+    if (!this.startDate || !this.endDate) {
+      alert('Lütfen başlangıç ve bitiş tarihlerini seçin');
+      return;
+    }
+
+    // Tarihleri Date objelerine çevir
+    const start = new Date(this.startDate);
+    const end = new Date(this.endDate);
+    end.setHours(23, 59, 59); // Bitiş tarihini günün sonuna ayarla
+
+    // Seçilen tarih aralığındaki toplantıları filtrele
+    const filteredMeetings = this.meetingHistory.filter(meeting => {
+      const meetingDate = new Date(meeting.date.split('.').reverse().join('-'));
+      return meetingDate >= start && meetingDate <= end;
+    });
+
+    if (filteredMeetings.length === 0) {
+      alert('Seçilen tarih aralığında toplantı bulunamadı');
+      return;
+    }
+
+    // Toplantı özeti için veriyi hazırla
+    const meetingSummaryData = filteredMeetings.map(meeting => ({
+      'Toplantı Tarihi': meeting.date,
+      'Başlangıç': meeting.startTime,
+      'Bitiş': meeting.endTime,
+      'Toplam Süre': this.formatTime(meeting.totalTime)
+    }));
+
+    // Katılımcı detayları için veriyi hazırla
+    const participantDetailsData: any[] = [];
+    filteredMeetings.forEach(meeting => {
+      meeting.participants.forEach(participant => {
+        participantDetailsData.push({
+          'Toplantı Tarihi': meeting.date,
+          'Toplantı Başlangıç': meeting.startTime,
+          'Toplantı Bitiş': meeting.endTime,
+          'Katılımcı ID': participant.id,
+          'Katılımcı Adı': participant.name,
+          'Katılımcı Süresi': this.formatTime(participant.time),
+          'Süre (Dakika)': Math.floor(participant.time / 60),
+          'Süre (Saniye)': participant.time % 60,
+          'Durum': participant.isLate ? 'Geç Geldi' : participant.shouldAttend ? 'Katılmadı' : 'Katıldı',
+          'Notlar': participant.notes.join(', ')
+        });
+      });
+    });
+
+    // Katılımcı bazlı toplam süreleri hesapla
+    const participantTotalTimes = participantDetailsData.reduce((acc: any, curr: any) => {
+      const id = curr['Katılımcı ID'];
+      if (!acc[id]) {
+        acc[id] = {
+          'Katılımcı ID': id,
+          'Katılımcı Adı': curr['Katılımcı Adı'],
+          'Toplam Süre (Dakika)': 0,
+          'Toplam Süre (Saniye)': 0,
+          'Katıldığı Toplantı Sayısı': 0
+        };
+      }
+      acc[id]['Toplam Süre (Dakika)'] += curr['Süre (Dakika)'];
+      acc[id]['Toplam Süre (Saniye)'] += curr['Süre (Saniye)'];
+      acc[id]['Katıldığı Toplantı Sayısı']++;
+      return acc;
+    }, {});
+
+    // Saniye değerlerini düzelt (60 saniyeyi 1 dakikaya çevir)
+    Object.values(participantTotalTimes).forEach((participant: any) => {
+      const totalSeconds = participant['Toplam Süre (Saniye)'];
+      const extraMinutes = Math.floor(totalSeconds / 60);
+      participant['Toplam Süre (Dakika)'] += extraMinutes;
+      participant['Toplam Süre (Saniye)'] = totalSeconds % 60;
+      participant['Toplam Süre'] = this.formatTime(
+        participant['Toplam Süre (Dakika)'] * 60 + participant['Toplam Süre (Saniye)']
+      );
+    });
+
+    // Excel çalışma kitabını oluştur
+    const wb: XLSX.WorkBook = XLSX.utils.book_new();
+
+    // Toplantı özeti sayfasını ekle
+    const wsMeetings: XLSX.WorkSheet = XLSX.utils.json_to_sheet(meetingSummaryData);
+    XLSX.utils.book_append_sheet(wb, wsMeetings, 'Toplantı Özeti');
+
+    // Katılımcı detayları sayfasını ekle
+    const wsParticipants: XLSX.WorkSheet = XLSX.utils.json_to_sheet(participantDetailsData);
+    XLSX.utils.book_append_sheet(wb, wsParticipants, 'Katılımcı Detayları');
+
+    // Katılımcı toplam süreleri sayfasını ekle
+    const wsParticipantTotals: XLSX.WorkSheet = XLSX.utils.json_to_sheet(
+      Object.values(participantTotalTimes)
+    );
+    XLSX.utils.book_append_sheet(wb, wsParticipantTotals, 'Katılımcı Toplamları');
+
+    // Dosyayı indir
+    const fileName = `Toplanti_Raporu_${this.formatDateForFileName(start)}_${this.formatDateForFileName(end)}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    this.showExportModal = false;
+  }
+
+  formatDateForFileName(date: Date): string {
+    return date.toISOString().split('T')[0];
+  }
+
+  showExportDialog() {
+    // Varsayılan tarih aralığını ayarla (son 30 gün)
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+    
+    this.endDate = end.toISOString().split('T')[0];
+    this.startDate = start.toISOString().split('T')[0];
+    
+    this.showExportModal = true;
+  }
+
+  closeExportModal() {
+    this.showExportModal = false;
   }
 }
 

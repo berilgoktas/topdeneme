@@ -86,6 +86,11 @@
   <!-- Meeting History -->
   <div *ngIf="showHistory" class="meeting-history">
     <h2>Geçmiş Toplantılar</h2>
+    <div class="history-controls">
+      <button class="btn" (click)="showExportDialog()">
+        <i class="fas fa-file-excel"></i> Excel'e Aktar
+      </button>
+    </div>
     <div class="history-card" *ngFor="let meeting of paginatedMeetings">
       <div class="history-header">
         <div>
@@ -208,6 +213,27 @@
         <button class="btn btn-secondary" (click)="closeLogoutModal()">İptal</button>
         <button class="btn btn-danger" (click)="confirmLogout()">Çıkış Yap</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal" *ngIf="showExportModal">
+  <div class="modal-content">
+    <h3>Toplantı Verilerini Dışa Aktar</h3>
+    <div class="date-picker-container">
+      <div class="date-input">
+        <label for="startDate">Başlangıç Tarihi:</label>
+        <input type="date" id="startDate" [(ngModel)]="startDate">
+      </div>
+      <div class="date-input">
+        <label for="endDate">Bitiş Tarihi:</label>
+        <input type="date" id="endDate" [(ngModel)]="endDate">
+      </div>
+    </div>
+    <div class="modal-buttons">
+      <button class="btn" (click)="exportToExcel()">Dışa Aktar</button>
+      <button class="btn btn-secondary" (click)="closeExportModal()">İptal</button>
     </div>
   </div>
 </div>
