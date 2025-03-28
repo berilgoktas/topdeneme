@@ -319,7 +319,7 @@ export class App implements OnInit {
         date: this.formatDateOnly(startTime),
         startTime: this.formatTimeOnly(startTime),
         endTime: this.formatTimeOnly(endTime),
-        totalTime: totalMeetingSeconds, // Başlangıç-bitiş farkını kullan
+        totalTime: totalMeetingSeconds, // Toplantı süresi artık katılımcı sürelerinden bağımsız
         participants: JSON.parse(JSON.stringify(this.participants))
       };
 
@@ -394,31 +394,33 @@ export class App implements OnInit {
 
   async updateTime(event: Event, unit: 'minutes' | 'seconds', participant: Participant, meeting: MeetingHistory) {
     try {
-    const input = event.target as HTMLInputElement;
-    let value = Math.floor(Number(input.value));
-    
-    // Değer kontrolü
-    if (isNaN(value) || value < 0) {
-      value = 0;
-    } else if (value > 59) {
-      value = 59;
-    }
-    
-    // Input değerini güncelle ve imleci sonunda tut
-    const cursorPos = input.selectionStart;
-    input.value = value.toString();
-    input.setSelectionRange(cursorPos, cursorPos);
-    
-    // Zamanı güncelle
-    const currentUnits = this.getTimeUnits(participant.time);
-    if (unit === 'minutes') {
-      participant.time = value * 60 + currentUnits.seconds;
-    } else {
-      participant.time = currentUnits.minutes * 60 + value;
-    }
-    
-      // Toplantının toplam süresini güncelle
-      meeting.totalTime = meeting.participants.reduce((total, p) => total + p.time, 0);
+      const input = event.target as HTMLInputElement;
+      let value = Math.floor(Number(input.value));
+      
+      // Değer kontrolü
+      if (isNaN(value) || value < 0) {
+        value = 0;
+      } else if (value > 59) {
+        value = 59;
+      }
+      
+      // Input değerini güncelle ve imleci sonunda tut
+      const cursorPos = input.selectionStart;
+      input.value = value.toString();
+      input.setSelectionRange(cursorPos, cursorPos);
+      
+      // Zamanı güncelle
+      const currentUnits = this.getTimeUnits(participant.time);
+      if (unit === 'minutes') {
+        participant.time = value * 60 + currentUnits.seconds;
+      } else {
+        participant.time = currentUnits.minutes * 60 + value;
+      }
+
+      // Toplantı süresini başlangıç ve bitiş zamanlarından yeniden hesapla
+      const startDate = new Date(meeting.date.split('.').reverse().join('-') + 'T' + meeting.startTime);
+      const endDate = new Date(meeting.date.split('.').reverse().join('-') + 'T' + meeting.endTime);
+      meeting.totalTime = Math.floor((endDate.getTime() - startDate.getTime()) / 1000);
       
       // Firebase'de doğrudan bu toplantıyı güncelle
       const toplantiRef = ref(database, `toplantiGecmisi/${meeting.id}`);
@@ -434,10 +436,10 @@ export class App implements OnInit {
       console.log('Süre başarıyla güncellendi:', {
         participantName: participant.name,
         newTime: participant.time,
-        meetingTotal: meeting.totalTime
+        meetingTotalTime: meeting.totalTime
       });
     } catch (error) {
-      console.error('Süre güncellenirken hata oluştu:', error);
+      console.error('Süre güncellenirken hata:', error);
     }
   }
 
@@ -493,9 +495,10 @@ export class App implements OnInit {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      hour12: false
+      hour12: false,
+      timeZone: 'Europe/Istanbul'
     };
-    return new Date(date).toLocaleTimeString('tr-TR', options);
+    return date.toLocaleTimeString('tr-TR', options);
   }
 
   private saveViewState() {
@@ -542,9 +545,6 @@ export class App implements OnInit {
           participant.time = participant.tempTime;
         }
       });
-
-      // Toplam süreyi güncelle
-      meeting.totalTime = meeting.participants.reduce((total, p) => total + (p.time || 0), 0);
 
       // Firebase'e kaydet
       await this.saveMeetingHistory();
@@ -632,9 +632,10 @@ export class App implements OnInit {
       participant.time = newTime || 0;
       participant.tempTime = newTime || 0;
 
-      // Toplantının toplam süresini güncelle
-      const totalTime = meeting.participants.reduce((total, p) => total + (p.time || 0), 0);
-      meeting.totalTime = totalTime;
+      // Toplantı süresini başlangıç ve bitiş zamanlarından yeniden hesapla
+      const startDate = new Date(meeting.date.split('.').reverse().join('-') + 'T' + meeting.startTime);
+      const endDate = new Date(meeting.date.split('.').reverse().join('-') + 'T' + meeting.endTime);
+      meeting.totalTime = Math.floor((endDate.getTime() - startDate.getTime()) / 1000);
       
       // Firebase'de güncelleme yap
       const toplantiRef = ref(database, `toplantiGecmisi/${meeting.id}`);
@@ -646,7 +647,7 @@ export class App implements OnInit {
           participantId: participant.id,
           participantName: participant.name,
           newTime: newTime,
-          meetingTotal: totalTime
+          meetingTotalTime: meeting.totalTime
         });
       } catch (error) {
         console.error('Firebase güncelleme hatası:', error);
@@ -749,26 +750,37 @@ export class App implements OnInit {
     }
 
     // Toplantı özeti için veriyi hazırla
-    const meetingSummaryData = filteredMeetings.map(meeting => ({
-      'Toplantı Tarihi': meeting.date,
-      'Başlangıç': meeting.startTime,
-      'Bitiş': meeting.endTime,
-      'Toplam Süre': this.formatTime(meeting.totalTime)
-    }));
+    const meetingSummaryData = filteredMeetings.map(meeting => {
+      // Toplantı başlangıç ve bitiş zamanlarını Türkiye saatine çevir
+      const startDate = new Date(meeting.date.split('.').reverse().join('-') + 'T' + meeting.startTime);
+      const endDate = new Date(meeting.date.split('.').reverse().join('-') + 'T' + meeting.endTime);
+      
+      return {
+        'Toplantı Tarihi': meeting.date,
+        'Başlangıç (TR)': this.formatTimeOnly(startDate),
+        'Bitiş (TR)': this.formatTimeOnly(endDate),
+        'Toplantı Süresi': this.formatTime(meeting.totalTime)
+      };
+    });
 
     // Katılımcı detayları için veriyi hazırla
     const participantDetailsData: any[] = [];
     filteredMeetings.forEach(meeting => {
+      // Toplantı zamanlarını Türkiye saatine çevir
+      const startDate = new Date(meeting.date.split('.').reverse().join('-') + 'T' + meeting.startTime);
+      const endDate = new Date(meeting.date.split('.').reverse().join('-') + 'T' + meeting.endTime);
+
       meeting.participants.forEach(participant => {
         participantDetailsData.push({
           'Toplantı Tarihi': meeting.date,
-          'Toplantı Başlangıç': meeting.startTime,
-          'Toplantı Bitiş': meeting.endTime,
+          'Toplantı Başlangıç (TR)': this.formatTimeOnly(startDate),
+          'Toplantı Bitiş (TR)': this.formatTimeOnly(endDate),
+          'Toplantı Süresi': this.formatTime(meeting.totalTime),
           'Katılımcı ID': participant.id,
           'Katılımcı Adı': participant.name,
-          'Katılımcı Süresi': this.formatTime(participant.time),
-          'Süre (Dakika)': Math.floor(participant.time / 60),
-          'Süre (Saniye)': participant.time % 60,
+          'Konuşma Süresi': this.formatTime(participant.time),
+          'Konuşma (Dakika)': Math.floor(participant.time / 60),
+          'Konuşma (Saniye)': participant.time % 60,
           'Durum': participant.isLate ? 'Geç Geldi' : participant.shouldAttend ? 'Katılmadı' : 'Katıldı'
         });
       });
@@ -781,26 +793,31 @@ export class App implements OnInit {
         acc[id] = {
           'Katılımcı ID': id,
           'Katılımcı Adı': curr['Katılımcı Adı'],
-          'Toplam Süre (Dakika)': 0,
-          'Toplam Süre (Saniye)': 0,
-          'Katıldığı Toplantı Sayısı': 0
+          'Toplam Konuşma (Dakika)': 0,
+          'Toplam Konuşma (Saniye)': 0,
+          'Katıldığı Toplantı Sayısı': 0,
+          'Toplam Toplantı Süresi': 0
         };
       }
-      acc[id]['Toplam Süre (Dakika)'] += curr['Süre (Dakika)'];
-      acc[id]['Toplam Süre (Saniye)'] += curr['Süre (Saniye)'];
+      acc[id]['Toplam Konuşma (Dakika)'] += curr['Konuşma (Dakika)'];
+      acc[id]['Toplam Konuşma (Saniye)'] += curr['Konuşma (Saniye)'];
       acc[id]['Katıldığı Toplantı Sayısı']++;
+      // Toplantı süresini dakikaya çevir ve ekle
+      const meetingMinutes = Math.floor(curr['Toplantı Süresi'] / 60);
+      acc[id]['Toplam Toplantı Süresi'] += meetingMinutes;
       return acc;
     }, {});
 
     // Saniye değerlerini düzelt (60 saniyeyi 1 dakikaya çevir)
     Object.values(participantTotalTimes).forEach((participant: any) => {
-      const totalSeconds = participant['Toplam Süre (Saniye)'];
+      const totalSeconds = participant['Toplam Konuşma (Saniye)'];
       const extraMinutes = Math.floor(totalSeconds / 60);
-      participant['Toplam Süre (Dakika)'] += extraMinutes;
-      participant['Toplam Süre (Saniye)'] = totalSeconds % 60;
-      participant['Toplam Süre'] = this.formatTime(
-        participant['Toplam Süre (Dakika)'] * 60 + participant['Toplam Süre (Saniye)']
+      participant['Toplam Konuşma (Dakika)'] += extraMinutes;
+      participant['Toplam Konuşma (Saniye)'] = totalSeconds % 60;
+      participant['Toplam Konuşma Süresi'] = this.formatTime(
+        participant['Toplam Konuşma (Dakika)'] * 60 + participant['Toplam Konuşma (Saniye)']
       );
+      participant['Toplam Toplantı Süresi'] = this.formatTime(participant['Toplam Toplantı Süresi'] * 60);
     });
 
     // Excel çalışma kitabını oluştur
