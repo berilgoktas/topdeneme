@@ -280,11 +280,14 @@ export class App implements OnInit {
   toggleMeeting() {
     this.isMeetingRunning = !this.isMeetingRunning;
     if (this.isMeetingRunning) {
+      // Toplantı başlangıç zamanını Türkiye saatine göre ayarla
       this.meetingStartTime = new Date();
+      
       this.timer = setInterval(() => {
         if (this.meetingStartTime) {
           const now = new Date();
           this.totalMeetingTime = Math.floor((now.getTime() - this.meetingStartTime.getTime()) / 1000);
+          
           // Katılımcıların sürelerini güncelle
           this.participants.forEach(p => {
             if (p.isRunning) {
@@ -308,9 +311,10 @@ export class App implements OnInit {
       this.isMeetingRunning = false;
       clearInterval(this.timer);
 
+      // Türkiye saatine göre başlangıç ve bitiş zamanlarını ayarla
       const endTime = new Date();
       const startTime = this.meetingStartTime || new Date(endTime.getTime() - (this.totalMeetingTime * 1000));
-      
+
       // Toplam süreyi başlangıç ve bitiş zamanı farkından hesapla
       const totalMeetingSeconds = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
 
@@ -319,7 +323,7 @@ export class App implements OnInit {
         date: this.formatDateOnly(startTime),
         startTime: this.formatTimeOnly(startTime),
         endTime: this.formatTimeOnly(endTime),
-        totalTime: totalMeetingSeconds, // Toplantı süresi artık katılımcı sürelerinden bağımsız
+        totalTime: totalMeetingSeconds,
         participants: JSON.parse(JSON.stringify(this.participants))
       };
 
@@ -491,6 +495,7 @@ export class App implements OnInit {
   }
 
   formatTimeOnly(date: Date): string {
+    // Türkiye saati için ayarlar
     const options: Intl.DateTimeFormatOptions = {
       hour: '2-digit',
       minute: '2-digit',
@@ -498,7 +503,10 @@ export class App implements OnInit {
       hour12: false,
       timeZone: 'Europe/Istanbul'
     };
-    return date.toLocaleTimeString('tr-TR', options);
+
+    // Tarihi Türkiye saatine çevir
+    const turkeyTime = new Intl.DateTimeFormat('tr-TR', options).format(date);
+    return turkeyTime;
   }
 
   private saveViewState() {
