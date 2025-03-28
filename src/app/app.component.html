@@ -86,7 +86,7 @@
   <!-- Meeting History -->
   <div *ngIf="showHistory" class="meeting-history">
     <h2>Geçmiş Toplantılar</h2>
-    <div class="history-card" *ngFor="let meeting of meetingHistory">
+    <div class="history-card" *ngFor="let meeting of paginatedMeetings">
       <div class="history-header">
         <div>
           <h3>Toplantı Tarihi: {{ meeting.date }}</h3>
@@ -155,6 +155,31 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls" *ngIf="totalPages > 1">
+      <button class="btn btn-secondary" 
+              [disabled]="currentPage === 1"
+              (click)="changePage(currentPage - 1)">
+        Önceki
+      </button>
+      
+      <div class="page-numbers">
+        <button *ngFor="let page of pageNumbers"
+                class="btn"
+                [class.btn-primary]="page === currentPage"
+                [class.btn-outline-primary]="page !== currentPage"
+                (click)="changePage(page)">
+          {{ page }}
+        </button>
+      </div>
+
+      <button class="btn btn-secondary"
+              [disabled]="currentPage === totalPages"
+              (click)="changePage(currentPage + 1)">
+        Sonraki
+      </button>
     </div>
   </div>
 

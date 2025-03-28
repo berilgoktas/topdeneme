@@ -100,6 +100,33 @@ export class App implements OnInit {
 
   private meetingStartTime: Date | null = null;
 
+  currentPage: number = 1;
+  itemsPerPage: number = 5;
+  totalPages: number = 1;
+
+  get paginatedMeetings(): MeetingHistory[] {
+    const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+    const endIndex = startIndex + this.itemsPerPage;
+    return this.meetingHistory.slice(startIndex, endIndex);
+  }
+
+  get pageNumbers(): number[] {
+    return Array.from({ length: this.totalPages }, (_, i) => i + 1);
+  }
+
+  updateTotalPages() {
+    this.totalPages = Math.ceil(this.meetingHistory.length / this.itemsPerPage);
+    if (this.currentPage > this.totalPages) {
+      this.currentPage = this.totalPages || 1;
+    }
+  }
+
+  changePage(page: number) {
+    if (page >= 1 && page <= this.totalPages) {
+      this.currentPage = page;
+    }
+  }
+
   async ngOnInit() {
     // Login kontrolü
     this.isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
@@ -129,19 +156,15 @@ export class App implements OnInit {
       console.log('Toplantı geçmişi yükleniyor...');
       const toplantiGecmisiRef = ref(database, 'toplantiGecmisi');
       
-      // Gerçek zamanlı güncelleme için onValue kullanıyoruz
       onValue(toplantiGecmisiRef, (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val();
           console.log('Firebase\'den alınan ham veriler:', data);
 
-          // Veriyi diziye çevir
           let meetings: MeetingHistory[] = [];
           
           if (typeof data === 'object' && !Array.isArray(data)) {
-            // Eğer veri obje formatında ise (key-value pairs)
             meetings = Object.entries(data).map(([key, value]: [string, any]) => {
-              // Katılımcıları düzgün formata getir
               let participants = [];
               if (value.participants && typeof value.participants === 'object') {
                 if (Array.isArray(value.participants)) {
@@ -170,7 +193,6 @@ export class App implements OnInit {
               };
             });
           } else if (Array.isArray(data)) {
-            // Eğer veri zaten dizi formatında ise
             meetings = data.map(meeting => ({
               ...meeting,
               participants: meeting.participants.map((p: Participant) => ({
@@ -185,7 +207,6 @@ export class App implements OnInit {
             }));
           }
 
-          // Tarihe göre sırala (en yeni en üstte)
           meetings.sort((a, b) => {
             const dateA = new Date(`${a.date} ${a.startTime}`);
             const dateB = new Date(`${b.date} ${b.startTime}`);
@@ -193,19 +214,23 @@ export class App implements OnInit {
           });
 
           this.meetingHistory = meetings;
+          this.updateTotalPages();
           console.log('İşlenmiş toplantı geçmişi:', this.meetingHistory);
         } else {
           console.log('Toplantı geçmişi bulunamadı');
           this.meetingHistory = [];
+          this.updateTotalPages();
         }
       }, (error) => {
         console.error('Veri okuma hatası:', error);
         this.meetingHistory = [];
+        this.updateTotalPages();
       });
 
     } catch (error) {
       console.error('Toplantı geçmişi yüklenirken hata:', error);
       this.meetingHistory = [];
+      this.updateTotalPages();
     }
   }
 
