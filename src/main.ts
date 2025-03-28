@@ -98,6 +98,8 @@ export class App implements OnInit {
 
   showLogoutConfirmModal = false;
 
+  private meetingStartTime: Date | null = null;
+
   async ngOnInit() {
     // Login kontrolü
     this.isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
@@ -245,14 +247,19 @@ export class App implements OnInit {
   toggleMeeting() {
     this.isMeetingRunning = !this.isMeetingRunning;
     if (this.isMeetingRunning) {
+      this.meetingStartTime = new Date();
       this.timer = setInterval(() => {
-        this.totalMeetingTime++;
-        this.participants.forEach(p => {
-          if (p.isRunning) {
-            p.time++;
-          }
-        });
-        this.saveData();
+        if (this.meetingStartTime) {
+          const now = new Date();
+          this.totalMeetingTime = Math.floor((now.getTime() - this.meetingStartTime.getTime()) / 1000);
+          // Katılımcıların sürelerini güncelle
+          this.participants.forEach(p => {
+            if (p.isRunning) {
+              p.time++;
+            }
+          });
+          this.saveData();
+        }
       }, 1000);
     } else {
       clearInterval(this.timer);
@@ -268,34 +275,29 @@ export class App implements OnInit {
       this.isMeetingRunning = false;
       clearInterval(this.timer);
 
-      const now = new Date();
-      const startTime = new Date(now.getTime() - (this.totalMeetingTime * 1000));
+      const endTime = new Date();
+      const startTime = this.meetingStartTime || new Date(endTime.getTime() - (this.totalMeetingTime * 1000));
+      
+      // Toplam süreyi başlangıç ve bitiş zamanı farkından hesapla
+      const totalMeetingSeconds = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
 
       const meetingRecord: MeetingHistory = {
         id: Date.now().toString(),
         date: this.formatDateOnly(startTime),
         startTime: this.formatTimeOnly(startTime),
-        endTime: this.formatTimeOnly(now),
-        totalTime: this.totalMeetingTime,
+        endTime: this.formatTimeOnly(endTime),
+        totalTime: totalMeetingSeconds, // Başlangıç-bitiş farkını kullan
         participants: JSON.parse(JSON.stringify(this.participants))
       };
 
       try {
-        // Yeni toplantıyı geçmiş listesine ekle
-      this.meetingHistory.unshift(meetingRecord);
-        
-        // Tüm geçmişi Firebase'e kaydet
+        this.meetingHistory.unshift(meetingRecord);
         await this.saveMeetingHistory();
         console.log('Toplantı başarıyla kaydedildi:', meetingRecord);
-
-      // Toplantıyı sıfırla
         this.resetMeeting();
-
-      // Sayfanın en üstüne git
-      window.scrollTo(0, 0);
+        window.scrollTo(0, 0);
       } catch (error) {
         console.error('Toplantı kaydedilirken hata:', error);
-        // Hata durumunda eklenen toplantıyı geri al
         this.meetingHistory.shift();
       }
     };
@@ -481,6 +483,7 @@ export class App implements OnInit {
       this.isMeetingRunning = false;
       clearInterval(this.timer);
       this.totalMeetingTime = 0;
+      this.meetingStartTime = null;
       this.participants.forEach(p => {
         p.time = 0;
         p.isRunning = false;
@@ -532,8 +535,9 @@ export class App implements OnInit {
 
   private resetMeeting() {
     this.isMeetingRunning = false;
-    clearInterval(this.timer);
     this.totalMeetingTime = 0;
+    this.meetingStartTime = null;
+    clearInterval(this.timer);
     this.participants.forEach(p => {
       p.time = 0;
       p.isRunning = false;
@@ -542,6 +546,7 @@ export class App implements OnInit {
       p.notes = [];
       this.participantNotes[p.id] = '';
     });
+    this.saveData();
   }
 
   getTimeUnits(totalSeconds: number) {
