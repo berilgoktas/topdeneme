@@ -238,6 +238,19 @@
   </div>
 </div>
 
+<!-- Info Modal -->
+<div class="modal info-modal" *ngIf="showInfoModal">
+  <div class="modal-content info-modal-content">
+    <div class="info-message">
+      <i class="fas fa-info-circle"></i>
+      <p>{{ infoMessage }}</p>
+    </div>
+    <div class="modal-buttons">
+      <button class="btn" (click)="closeInfoModal()">Tamam</button>
+    </div>
+  </div>
+</div>
+
 <style>
 .header {
   display: flex;

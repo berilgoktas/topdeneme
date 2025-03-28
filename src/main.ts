@@ -109,6 +109,9 @@ export class App implements OnInit {
   endDate: string = '';
   showExportModal: boolean = false;
 
+  showInfoModal: boolean = false;
+  infoMessage: string = '';
+
   get paginatedMeetings(): MeetingHistory[] {
     const startIndex = (this.currentPage - 1) * this.itemsPerPage;
     const endIndex = startIndex + this.itemsPerPage;
@@ -713,9 +716,19 @@ export class App implements OnInit {
     window.location.reload();
   }
 
+  showInfo(message: string) {
+    this.infoMessage = message;
+    this.showInfoModal = true;
+  }
+
+  closeInfoModal() {
+    this.showInfoModal = false;
+    this.infoMessage = '';
+  }
+
   exportToExcel() {
     if (!this.startDate || !this.endDate) {
-      alert('Lütfen başlangıç ve bitiş tarihlerini seçin');
+      this.showInfo('Lütfen başlangıç ve bitiş tarihlerini seçin');
       return;
     }
 
@@ -731,7 +744,7 @@ export class App implements OnInit {
     });
 
     if (filteredMeetings.length === 0) {
-      alert('Seçilen tarih aralığında toplantı bulunamadı');
+      this.showInfo('Seçilen tarih aralığında veri bulunmamaktadır.');
       return;
     }
 
@@ -756,8 +769,7 @@ export class App implements OnInit {
           'Katılımcı Süresi': this.formatTime(participant.time),
           'Süre (Dakika)': Math.floor(participant.time / 60),
           'Süre (Saniye)': participant.time % 60,
-          'Durum': participant.isLate ? 'Geç Geldi' : participant.shouldAttend ? 'Katılmadı' : 'Katıldı',
-          'Notlar': participant.notes.join(', ')
+          'Durum': participant.isLate ? 'Geç Geldi' : participant.shouldAttend ? 'Katılmadı' : 'Katıldı'
         });
       });
     });
@@ -794,19 +806,73 @@ export class App implements OnInit {
     // Excel çalışma kitabını oluştur
     const wb: XLSX.WorkBook = XLSX.utils.book_new();
 
-    // Toplantı özeti sayfasını ekle
+    // Sütun genişliklerini ayarlama fonksiyonu
+    const autoAdjustColumns = (worksheet: XLSX.WorkSheet, data: any[]) => {
+      if (!data || data.length === 0) return;
+
+      const columnWidths: { [key: string]: number } = {};
+      
+      // Başlıkların genişliklerini hesapla
+      const headers = Object.keys(data[0]);
+      headers.forEach(header => {
+        columnWidths[header] = Math.max(
+          header.length,
+          ...data.map(row => {
+            const cellValue = row[header]?.toString() || '';
+            return cellValue.length;
+          })
+        );
+      });
+
+      // Sütun genişliklerini ayarla
+      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+      const columnInfo: { [key: string]: { wch: number } } = {};
+
+      headers.forEach((header, index) => {
+        const width = columnWidths[header];
+        // Minimum ve maksimum genişlik sınırları
+        const adjustedWidth = Math.max(8, Math.min(width + 2, 50));
+        const col = XLSX.utils.encode_col(index);
+        columnInfo[col] = { wch: adjustedWidth };
+      });
+
+      worksheet['!cols'] = Object.values(columnInfo);
+    };
+
+    // Toplantı özeti sayfası
     const wsMeetings: XLSX.WorkSheet = XLSX.utils.json_to_sheet(meetingSummaryData);
+    autoAdjustColumns(wsMeetings, meetingSummaryData);
     XLSX.utils.book_append_sheet(wb, wsMeetings, 'Toplantı Özeti');
 
-    // Katılımcı detayları sayfasını ekle
+    // Katılımcı detayları sayfası
     const wsParticipants: XLSX.WorkSheet = XLSX.utils.json_to_sheet(participantDetailsData);
+    autoAdjustColumns(wsParticipants, participantDetailsData);
     XLSX.utils.book_append_sheet(wb, wsParticipants, 'Katılımcı Detayları');
 
-    // Katılımcı toplam süreleri sayfasını ekle
-    const wsParticipantTotals: XLSX.WorkSheet = XLSX.utils.json_to_sheet(
-      Object.values(participantTotalTimes)
-    );
+    // Katılımcı toplam süreleri sayfası
+    const participantTotalsData = Object.values(participantTotalTimes);
+    const wsParticipantTotals: XLSX.WorkSheet = XLSX.utils.json_to_sheet(participantTotalsData);
+    autoAdjustColumns(wsParticipantTotals, participantTotalsData);
     XLSX.utils.book_append_sheet(wb, wsParticipantTotals, 'Katılımcı Toplamları');
+
+    // Stil ayarları
+    ['Toplantı Özeti', 'Katılımcı Detayları', 'Katılımcı Toplamları'].forEach(sheetName => {
+      const ws = wb.Sheets[sheetName];
+      if (ws) {
+        // Başlık satırı için stil
+        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+        for (let col = range.s.c; col <= range.e.c; col++) {
+          const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
+          if (!ws[cellRef]) continue;
+          
+          ws[cellRef].s = {
+            font: { bold: true },
+            fill: { fgColor: { rgb: "E0E0E0" } },
+            alignment: { horizontal: "center", vertical: "center" }
+          };
+        }
+      }
+    });
 
     // Dosyayı indir
     const fileName = `Toplanti_Raporu_${this.formatDateForFileName(start)}_${this.formatDateForFileName(end)}.xlsx`;
